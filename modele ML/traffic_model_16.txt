@@ -1,0 +1,1 @@
+{'min_green_time': 40, 'max_green_time': 85, 'traffic_thresholds': {'low': 30, 'high': 60}, 'learning_rate': 0.25, 'reward_parameters': {'vehicle_passed': 2.5, 'waiting_time_penalty': -0.65}}

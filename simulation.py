@@ -2,6 +2,7 @@ import random
 import time
 import threading
 import pygame
+import pickle
 import sys
 
 # Constants
@@ -437,7 +438,15 @@ class RunSimulation:
 
         # Variable to track the total number of crossed vehicles
         self.total_crossed_vehicles = 0
+        def load_values_from_file(filename):
+            with open(filename, 'r') as file:  # 'r' pour le mode lecture (read mode)
+                values = [line.strip() for line in
+                          file.readlines()]
+            return values
 
+            # Utilisation de la fonction pour charger les données de 'bestModel.txt'
+            filename = "bestModel.txt"  # Assurez-vous que le chemin est correct
+            model_values = load_values_from_file(filename)
         self.initialize()
 
         self.thread1 = threading.Thread(name="generate_vehicles", target=generateVehicles,
@@ -475,6 +484,12 @@ class RunSimulation:
 
     def add(self, vehicle):
         self.simulation.add(vehicle)
+
+    def add_reward(self):
+        self.total_rewards += 1
+
+    def add_penalty(self):
+        self.total_rewards -= 3
 
     def reset_simulation(self):
         global total_crossed_vehicles, signals, vehicle_counter, vehicle_spawned_counter, vehicle_kill_counter
@@ -638,3 +653,7 @@ class RunSimulation:
             'max_crossing_time': self.max_waiting_time,
             'min_crossing_time': self.min_waiting_time
         }
+
+    def save_model(model, filename):
+        with open(filename, 'wb') as f:
+            pickle.dump(model, f)
