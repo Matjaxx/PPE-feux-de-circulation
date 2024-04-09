@@ -333,7 +333,11 @@ def repeat(simulation_instance, simulation_speed):
         last_time = pygame.time.get_ticks()
 
         signals[currentGreen].remaining_green_time -= simulation_speed * dt_seconds
-        nextGreen = (currentGreen + 1) % noOfSignals
+
+        if simulation_instance.traffic_light_policy == "optimal":
+            nextGreen = signals.index(max(signals, key=lambda x: x.vehicles_in_front))
+        else:  # Random traffic light policy
+            nextGreen = (currentGreen + 1) % noOfSignals
 
         if signals[currentGreen].remaining_green_time < 0 and currentYellow == 0:
             signals[currentGreen].remaining_green_time = 0
@@ -351,7 +355,12 @@ def repeat(simulation_instance, simulation_speed):
             pygame.time.delay(int(DELAY_TIME / simulation_speed))
 
             currentGreen = nextGreen
-            signals[currentGreen].remaining_green_time = MIN_GREEN_TIME + 1
+
+            if simulation_instance.traffic_light_policy == "optimal":
+                signals[currentGreen].remaining_green_time = max(MIN_GREEN_TIME + 1,
+                                                                 signals[currentGreen].vehicles_in_front / 2)
+            else:  # Random traffic light policy
+                signals[currentGreen].remaining_green_time = MIN_GREEN_TIME + 1
 
         pygame.time.delay(int(DELAY_TIME / simulation_speed))
 
@@ -401,9 +410,11 @@ def destroy_vehicle(simulation_speed, simulation_instance):
 
 
 class RunSimulation:
-    def __init__(self, total_vehicles_to_cross, simulation_speed, trafficDensity, direction_priority):
+    def __init__(self, total_vehicles_to_cross, simulation_speed, trafficDensity, direction_priority,
+                 traffic_light_policy):
         global total_crossed_vehicles
         pygame.init()  # Initialize pygame
+        self.traffic_light_policy = traffic_light_policy
         self.direction_priority = direction_priority
         self.simulation = pygame.sprite.Group()
         self.total_time = 0

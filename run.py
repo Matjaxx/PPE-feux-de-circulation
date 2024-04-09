@@ -5,13 +5,13 @@ if __name__ == "__main__":
     simulation_speed = 10  # Speed factor for the simulation
     traffic_density = 0.3  # Density of traffic (ranges from 0.1 to 1)
     num_simulations = 2  # Number of simulations to run
-    direction_priority = [1, 1, 1, 1]  # Direction priority array (0: Down, 1: Left, 2: Up, 3: Right) (0 to 1)
+    direction_priority = [1, 0, 1, 0]  # Direction priority array (0: Down, 1: Left, 2: Up, 3: Right) (0 to 1)
     simulation_results = []  # List to store results of each simulation
 
     # Run multiple simulations
     for _ in range(num_simulations):
         simulation_instance = RunSimulation(total_vehicles_to_cross, simulation_speed, traffic_density,
-                                            direction_priority)
+                                            direction_priority, traffic_light_policy="optimal")  # normal or optimal
         results = simulation_instance.get_results()
         simulation_results.append(results)
 
