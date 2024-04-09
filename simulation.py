@@ -1,17 +1,16 @@
+import random
+import time
+import threading
 import pygame
 import sys
-import threading
-import time
-import random
 
-# Global Constants
-FPS = 1000  # Frames per second
+# Constants
+FPS = 500
 DELAY_TIME = 1000
 MIN_GREEN_TIME = 5  # Minimum green time for each signal
 YELLOW_TIME = 3  # Yellow time for each signal after green
 SWITCH_DELAY = 2  # Delay before switching to the next green light (all signals are red)
-TRAFFIC_DENSITY = 5  # Default traffic density
-SIMULATION_SPEED = 1  # Default simulation speed
+TRAFFIC_DENSITY = 0.3  # Default traffic density
 
 # Global Variables
 signals = []  # List to store traffic signals
@@ -27,6 +26,10 @@ y = {'right': [510], 'down': [-400], 'left': [420], 'up': [1400]}  # Y-coordinat
 speeds = {'car': 0.3, 'truck': 0.29, 'taxi': 0.32, 'bike': 0.35}  # speeds of vehicles
 stopLines = {'right': 480, 'down': 280, 'left': 920, 'up': 720}  # Stop lines for vehicles
 defaultStop = {'right': 570, 'down': 360, 'left': 840, 'up': 638}  # Threshold for vehicles to cross the intersection
+total_crossed_vehicles = 0  # Total number of crossed vehicles
+vehicle_counter = 0  # Counter for total spawned vehicles
+vehicle_spawned_counter = 0  # Counter for vehicles spawned in the simulation
+vehicle_kill_counter = 0  # Counter for vehicles kill in the simulation
 noOfSignals = 4  # Number of traffic signals
 signalCords = [(572, 340), (770, 375), (795, 535), (535, 590)]  # Coordinates for signals
 
@@ -125,6 +128,19 @@ class Vehicle(pygame.sprite.Sprite):
         self.hit_box.x = self.x
         self.hit_box.y = self.y
 
+    # return the vehicle which is in front of the current vehicle
+    def check_collision_with_vehicles(self):
+        # Check for collision with other vehicles
+        for vehicle in laneGroups[self.direction]:
+            if vehicle != self:
+                if self.hit_box.colliderect(vehicle.hit_box):
+                    if self.get_collision_direction(vehicle) == 'front':
+                        self.vehicle_in_front = vehicle
+                        return True
+                    else:
+                        pass
+        return False
+
     def check_reach_stop_line(self):
         # Determine if the vehicle has reached the stop line:
         if self.direction == 'right' and self.x + self.hit_box.width >= stopLines[self.direction]:
@@ -136,8 +152,20 @@ class Vehicle(pygame.sprite.Sprite):
         elif self.direction == 'up' and self.y <= stopLines[self.direction]:
             return True
 
+    def check_crossed(self):
+        # Determine if the vehicle has crossed the intersection (default stop line):
+        if self.direction == 'right' and self.x + self.hit_box.width > defaultStop[self.direction]:
+            return True
+        elif self.direction == 'down' and self.y + self.hit_box.height > defaultStop[self.direction]:
+            return True
+        elif self.direction == 'left' and self.x < defaultStop[self.direction]:
+            return True
+        elif self.direction == 'up' and self.y < defaultStop[self.direction]:
+            return True
+
     def update(self):
-        # Update the vehicle
+        global total_crossed_vehicles
+
         if self.check_reach_stop_line() and self.crossed is False:
             if self.direction_number != currentGreen:
                 # Harsh braking when reaching a red signal at the stop line
@@ -175,23 +203,21 @@ class Vehicle(pygame.sprite.Sprite):
                     # Gradual deceleration when approaching the front vehicle
                     self.speed *= 0.99
 
+        # Check if the vehicle has crossed the intersection
+        if self.check_crossed() and self.crossed is False:
+            self.crossed = True
+            self.simulation_instance.total_crossed_vehicles += 1
+
+            self.cross_time = time.time()
+            # Check for collision with other vehicles
+        if self.check_collision_with_vehicles():
+            self.speed = 0
+
         # Move the vehicle based on the direction
         self.move()
 
         # Update rotated hit_box
         self._create_hit_box()
-
-    def check_collision_with_vehicles(self):
-        # Check for collision with other vehicles
-        for vehicle in laneGroups[self.direction]:
-            if vehicle != self:
-                if self.hit_box.colliderect(vehicle.hit_box):
-                    if self.get_collision_direction(vehicle) == 'front':
-                        self.vehicle_in_front = vehicle
-                        return True
-                    else:
-                        pass
-        return False
 
     def get_distance_to_front_vehicle(self):
         # Get the distance to the vehicle in front of the current vehicle
@@ -297,119 +323,199 @@ class Vehicle(pygame.sprite.Sprite):
                 self.vehicle_in_front = None
 
 
-def kill_vehicle():
-    """Destroy a vehicle."""
-    while True:
-        for direction, group in laneGroups.items():
-            for vehicle in group:
-                if vehicle.check_limit():
-                    vehicle.kill()
-        pygame.time.delay(500)
+def repeat(simulation_instance, simulation_speed):
+    global currentGreen, nextGreen, currentYellow
+    last_time = pygame.time.get_ticks()
+
+    while not simulation_instance.exit_event.is_set():
+        dt = pygame.time.get_ticks() - last_time
+        dt_seconds = dt / 1000  # Convert milliseconds to seconds
+        last_time = pygame.time.get_ticks()
+
+        signals[currentGreen].remaining_green_time -= simulation_speed * dt_seconds
+        nextGreen = (currentGreen + 1) % noOfSignals
+
+        if signals[currentGreen].remaining_green_time < 0 and currentYellow == 0:
+            signals[currentGreen].remaining_green_time = 0
+            currentYellow = 1
+            signals[currentGreen].remaining_yellow_time = YELLOW_TIME  # Reset yellow time
+
+        if currentYellow == 1:
+            signals[currentGreen].remaining_yellow_time -= simulation_speed * dt_seconds
+
+        if signals[currentGreen].remaining_yellow_time < 0 and currentYellow == 1:
+            currentYellow = 0
+            signals[currentGreen].remaining_yellow_time = 0
+
+            currentGreen = -1
+            pygame.time.delay(int(DELAY_TIME / simulation_speed))
+
+            currentGreen = nextGreen
+            signals[currentGreen].remaining_green_time = MIN_GREEN_TIME + 1
+
+        pygame.time.delay(int(DELAY_TIME / simulation_speed))
 
 
-def initialize():
-    """Initialize the simulation."""
-    global signals, laneGroups
+def generateVehicles(simulation_instance, simulation_speed, trafficDensity, direction_priority):
+    global vehicle_counter, vehicle_spawned_counter
+    while not simulation_instance.exit_event.is_set():
+        # Randomly select a vehicle type and direction
+        vehicle_type = vehicleTypes[random.randint(0, 3)]
 
-    # Initialize traffic signals
-    for i in range(noOfSignals):
-        signal = TrafficSignal(0, 0, MIN_GREEN_TIME)
-        signals.append(signal)
+        # Randomly select a vehicle type based on the direction priority
+        direction_number = random.choices(population=[0, 1, 2, 3], weights=direction_priority, k=1)[0]
+        direction = directionNumbers[direction_number]
 
-    # Initialize lane groups
-    for direction in directionNumbers.values():
-        laneGroups[direction] = pygame.sprite.Group()
+        # Create a vehicle object
+        new_vehicle = Vehicle(vehicle_type, direction_number, direction, simulation_speed, simulation_instance)
+
+        # Check if there are existing vehicles on the lane
+        if len(laneGroups[direction]) > 0:
+            # Get the last vehicle on the lane based on his direction and current coords
+            last_vehicle = laneGroups[direction].sprites()[-1]
+
+            # Set the spawn position behind the last vehicle based on the direction with a distance
+            if direction == 'right':
+                new_vehicle.x = last_vehicle.x - new_vehicle.hit_box.width - random.randint(100, 200)
+            elif direction == 'down':
+                new_vehicle.y = last_vehicle.y - new_vehicle.hit_box.height - random.randint(100, 200)
+            elif direction == 'left':
+                new_vehicle.x = last_vehicle.x + last_vehicle.hit_box.width + random.randint(100, 200)
+            elif direction == 'up':
+                new_vehicle.y = last_vehicle.y + last_vehicle.hit_box.height + random.randint(100, 200)
+
+        simulation_instance.add(new_vehicle)
+        vehicle_counter += 1
+        vehicle_spawned_counter += 1
+        time.sleep(1 / (simulation_speed * 3 * trafficDensity))  # Adjusted delay based on simulation speed
+
+
+def destroy_vehicle(simulation_speed, simulation_instance):
+    global vehicle_kill_counter
+    while not simulation_instance.exit_event.is_set():
+        for vehicle in simulation_instance.simulation:
+            if vehicle.check_limit():
+                vehicle.kill()
+                vehicle_kill_counter += 1
+        time.sleep(1 / simulation_speed)
 
 
 class RunSimulation:
-    """Class to run the traffic simulation."""
+    def __init__(self, total_vehicles_to_cross, simulation_speed, trafficDensity, direction_priority):
+        global total_crossed_vehicles
+        pygame.init()  # Initialize pygame
+        self.direction_priority = direction_priority
+        self.simulation = pygame.sprite.Group()
+        self.total_time = 0
+        self.average_waiting_time = 0
+        self.min_waiting_time = 0
+        self.max_waiting_time = 0
 
-    def __init__(self):
-        """Initialize the simulation."""
+        # Flag to toggle debug mode
+        self.debug_mode = False
+
         self.exit_event = threading.Event()
-        initialize()
+        self.total_vehicles_to_cross = total_vehicles_to_cross
+        self.simulation_speed = simulation_speed
+        # Initialize a clock object to control the frame rate
+        self.clock = pygame.time.Clock()
+        self.crossing_times = []  # Initialize crossing times list
 
-        self.thread1 = threading.Thread(name="repeat", target=self.repeat, args=(SIMULATION_SPEED,))
+        self.total_crossed_vehicles = 0
+        self.crossing_times = []  # Initialize crossing times list
+
+        # Variable to track the total number of crossed vehicles
+        self.total_crossed_vehicles = 0
+
+        self.initialize()
+
+        self.thread1 = threading.Thread(name="generate_vehicles", target=generateVehicles,
+                                        args=(self, self.simulation_speed, trafficDensity, self.direction_priority))
         self.thread1.daemon = True
         self.thread1.start()
 
-        self.thread2 = threading.Thread(name="kill vehicles", target=kill_vehicle)
+        self.thread2 = threading.Thread(name="kill_and_replace", target=destroy_vehicle,
+                                        args=(self.simulation_speed, self,))
         self.thread2.daemon = True
         self.thread2.start()
 
-    def repeat(self, simulation_speed):
-        global currentGreen, currentYellow, nextGreen
-        last_time = pygame.time.get_ticks()
+        self.thread3 = threading.Thread(name="repeat", target=repeat, args=(self, simulation_speed))
+        self.thread3.daemon = True
+        self.thread3.start()
 
-        while not self.exit_event.is_set():
-            dt = pygame.time.get_ticks() - last_time
-            dt_seconds = dt / 1000  # Convert milliseconds to seconds
-            last_time = pygame.time.get_ticks()
-
-            signals[currentGreen].remaining_green_time -= simulation_speed * dt_seconds
-            nextGreen = (currentGreen + 1) % noOfSignals
-
-            if signals[currentGreen].remaining_green_time < 0 and currentYellow == 0:
-                signals[currentGreen].remaining_green_time = 0
-                currentYellow = 1
-                signals[currentGreen].remaining_yellow_time = YELLOW_TIME  # Reset yellow time
-
-            if currentYellow == 1:
-                signals[currentGreen].remaining_yellow_time -= simulation_speed * dt_seconds
-
-            if signals[currentGreen].remaining_yellow_time < 0 and currentYellow == 1:
-                currentYellow = 0
-                signals[currentGreen].remaining_yellow_time = 0
-
-                currentGreen = -1
-                pygame.time.delay(int(DELAY_TIME / simulation_speed))
-
-                currentGreen = nextGreen
-                green_time = MIN_GREEN_TIME + 1
-                signals[currentGreen].remaining_green_time = green_time / simulation_speed
-
-            pygame.time.delay(int(DELAY_TIME / simulation_speed))
-
-    def spawn_vehicle(self):
-        """Spawn a vehicle."""
-        direction = random.choice(list(directionNumbers.values()))
-        vehicle_type = random.choice(list(vehicleTypes.values()))
-        vehicle = Vehicle(vehicle_type, 0, direction, 1, self)
-        vehicle.spawn_time = time.time()  # Update spawn time
-        laneGroups[direction].add(vehicle)  # Add the vehicle to the lane group
-
-    def run(self):
-        """Run the simulation."""
-        # Initialize pygame
+        # Set up pygame
         pygame.init()
 
-        # Set up the screen
-        screen_width = 1400
-        screen_height = 1000
-        screen = pygame.display.set_mode((screen_width, screen_height))
-        pygame.display.set_caption("Traffic Simulation")
+        # Define colors and screen size
+        self.black = (0, 0, 0)
+        self.white = (255, 255, 255)
+        self.screenWidth = 1400
+        self.screenHeight = 1000
+        self.screenSize = (self.screenWidth, self.screenHeight)
 
-        # Clock for controlling the frame rate
-        clock = pygame.time.Clock()
+        # Load background image and set up display
+        self.background = pygame.image.load('images/intersection.png')
+        self.screen = pygame.display.set_mode(self.screenSize)
+        pygame.display.set_caption("SIMULATION")
 
-        # Spawn vehicles at the start of simulation
-        self.spawn_vehicle()
+        # Set up font
+        self.font = pygame.font.Font(None, 30)
+        self.run()
 
-        # Main simulation loop
-        while True:
+    def add(self, vehicle):
+        self.simulation.add(vehicle)
+
+    def reset_simulation(self):
+        global total_crossed_vehicles, signals, vehicle_counter, vehicle_spawned_counter, vehicle_kill_counter
+        # kill all threads
+        # Set the exit event to signal threads to exit
+        self.exit_event.set()
+
+        # Wait for threads to finish
+        self.thread1.join()
+        self.thread2.join()
+        self.thread3.join()
+
+        # Reset the exit event
+        self.exit_event.clear()
+
+        total_crossed_vehicles = 0
+        self.simulation.empty()
+        signals.clear()
+        vehicle_counter = 0
+        vehicle_spawned_counter = 0
+        vehicle_kill_counter = 0
+        self.initialize()  # Reinitialize signals
+        for direction in laneGroups:
+            laneGroups[direction].empty()
+        # Recreate laneGroups for each direction
+        laneGroups['right'] = pygame.sprite.Group()
+        laneGroups['down'] = pygame.sprite.Group()
+        laneGroups['left'] = pygame.sprite.Group()
+        laneGroups['up'] = pygame.sprite.Group()
+        # Recreate signals with initial values
+        for i in range(0, noOfSignals):
+            signals.append(TrafficSignal(10, 3, 5))
+        self.exit_event.clear()
+        pygame.quit()
+
+    def toggle_debug_mode(self):
+        self.debug_mode = not self.debug_mode
+
+    def run(self):
+        while self.total_crossed_vehicles < self.total_vehicles_to_cross:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
-                    pygame.quit()
                     sys.exit()
+                elif event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_F10:
+                        self.toggle_debug_mode()
 
-            # Clear the screen
-            screen.fill((255, 255, 255))
+            self.screen.blit(self.background, (0, 0))
 
-            # Draw intersection image
-            screen.blit(intersection_image, (0, 0))
-
-            # Draw traffic lights
+            # Display signals
             for i in range(0, noOfSignals):
+                rotated_signal = pygame.transform.rotate(red_signal_image, i * 90)
                 if i == currentGreen:
                     if currentYellow == 1:
                         rotated_signal = pygame.transform.rotate(yellow_signal_image, i * 90)
@@ -420,25 +526,45 @@ class RunSimulation:
                     # Adjust the rotation angle for signals 0 and 2
                     rotated_signal = pygame.transform.rotate(red_signal_image, (i + 2) % noOfSignals * 270)
 
-                screen.blit(rotated_signal, signalCords[i])
+                self.screen.blit(rotated_signal, signalCords[i])
 
-            # Update and draw vehicles
-            for direction, group in laneGroups.items():
-                for vehicle in group:
-                    vehicle.update()
-                    screen.blit(vehicle.image, (vehicle.x, vehicle.y))
+                # Update the number of vehicles in front of the stop line for each signal
+                signals[i].vehicles_in_front = 0
 
-            # Spawn a new vehicle with a certain probability
-            if random.random() < TRAFFIC_DENSITY / FPS:
-                self.spawn_vehicle()
+                for vehicle in laneGroups[directionNumbers[i]]:
+                    if vehicle.crossed is False:
+                        signals[i].vehicles_in_front += 1
 
-            # Update the display
-            pygame.display.flip()
+            # Display vehicles
+            for vehicle in self.simulation:
+                self.screen.blit(vehicle.image, [vehicle.x, vehicle.y])
 
-            # Cap the frame rate
-            clock.tick(FPS)
+                vehicle.update()
+                if vehicle.cross_time is not None and vehicle.flag is False:
+                    spawn_to_cross_time = vehicle.cross_time - vehicle.spawn_time
+                    self.crossing_times.append(spawn_to_cross_time * self.simulation_speed)
+                    vehicle.flag = True
 
+            pygame.display.update()
 
-if __name__ == "__main__":
-    simulation = RunSimulation()
-    simulation.run()
+            # Use clock.tick() to control the frame rate
+            self.clock.tick(FPS)  # Adjust to the desired frame rate
+
+        self.total_time = pygame.time.get_ticks() * self.simulation_speed / 1000
+        print(f"Simulation completed. Total time: {self.total_time} seconds.")
+        self.average_waiting_time = sum(self.crossing_times) / len(self.crossing_times)
+        self.min_waiting_time = min(self.crossing_times)
+        self.max_waiting_time = max(self.crossing_times)
+
+        # Reset the simulation after completion
+        self.reset_simulation()
+
+    def initialize(self):
+        global signals, laneGroups
+        signals = []  # Clear existing signals
+        self.crossing_times = []  # Clear existing crossing times
+        for i in range(0, noOfSignals):
+            signals.append(TrafficSignal(10, 3, 5))
+
+        laneGroups = {'right': pygame.sprite.Group(), 'down': pygame.sprite.Group(), 'left': pygame.sprite.Group(),
+                      'up': pygame.sprite.Group()}
