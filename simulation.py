@@ -27,6 +27,16 @@ defaultStop = {'right': 570, 'down': 360, 'left': 840, 'up': 638}  # Threshold f
 noOfSignals = 4  # Number of traffic signals
 signalCords = [(572, 340), (770, 375), (795, 535), (535, 590)]  # Coordinates for signals
 
+# Load images
+car_image = pygame.image.load('images/vehicles/car.png')
+truck_image = pygame.image.load('images/vehicles/truck.png')
+taxi_image = pygame.image.load('images/vehicles/taxi.png')
+bike_image = pygame.image.load('images/vehicles/bike.png')
+red_signal_image = pygame.image.load('images/signals/red.png')
+yellow_signal_image = pygame.image.load('images/signals/yellow.png')
+green_signal_image = pygame.image.load('images/signals/green.png')
+intersection_image = pygame.image.load('images/intersection.png')
+
 
 class TrafficSignal:
     """Class to represent a traffic signal."""
@@ -64,6 +74,19 @@ class Vehicle(pygame.sprite.Sprite):
         self.acceleration = acceleration[vehicle_type]
         self.vehicle_in_front = None
 
+        # Load vehicle image based on the type
+        if vehicle_type == 'car':
+            self.image = pygame.image.load('images/vehicles/car.png')
+        elif vehicle_type == 'truck':
+            self.image = pygame.image.load('images/vehicles/truck.png')
+        elif vehicle_type == 'taxi':
+            self.image = pygame.image.load('images/vehicles/taxi.png')
+        elif vehicle_type == 'bike':
+            self.image = pygame.image.load('images/vehicles/bike.png')
+
+        self.original_image = self.image  # Store the original image for rotation
+        self.rect = self.image.get_rect()
+
         # Set the initial position based on the direction
         if direction == 'right':
             self.x = x['right'][0]
@@ -82,6 +105,7 @@ class Vehicle(pygame.sprite.Sprite):
             self.y = y['up'][0]
             self.rotation = 90
 
+        self.image = pygame.transform.rotate(self.original_image, self.rotation)
         self.direction = direction
         self.speed = speeds[vehicle_type]
         self.stop = stopLines[direction]
@@ -93,5 +117,7 @@ class Vehicle(pygame.sprite.Sprite):
         laneGroups[self.direction].add(self)
 
     def _create_hit_box(self):
+        # Create a hit_box based on the rotated image
+        self.hit_box = self.image.get_rect()
         self.hit_box.x = self.x
         self.hit_box.y = self.y
