@@ -154,17 +154,45 @@ class Vehicle(pygame.sprite.Sprite):
             return False
 
 
+def kill_vehicle():
+    """Destroy a vehicle."""
+    while True:
+        for direction, group in laneGroups.items():
+            for vehicle in group:
+                if vehicle.check_limit():
+                    vehicle.kill()
+        pygame.time.delay(500)
+
+
+def initialize():
+    """Initialize the simulation."""
+    global signals, laneGroups
+
+    # Initialize traffic signals
+    for i in range(noOfSignals):
+        signal = TrafficSignal(0, 0, MIN_GREEN_TIME)
+        signals.append(signal)
+
+    # Initialize lane groups
+    for direction in directionNumbers.values():
+        laneGroups[direction] = pygame.sprite.Group()
+
+
 class RunSimulation:
     """Class to run the traffic simulation."""
 
     def __init__(self):
         """Initialize the simulation."""
         self.exit_event = threading.Event()
-        self.initialize()
+        initialize()
 
-        self.thread4 = threading.Thread(name="repeat", target=self.repeat, args=(SIMULATION_SPEED,))
-        self.thread4.daemon = True
-        self.thread4.start()
+        self.thread1 = threading.Thread(name="repeat", target=self.repeat, args=(SIMULATION_SPEED,))
+        self.thread1.daemon = True
+        self.thread1.start()
+
+        self.thread2 = threading.Thread(name="kill vehicles", target=kill_vehicle)
+        self.thread2.daemon = True
+        self.thread2.start()
 
     def repeat(self, simulation_speed):
         global currentGreen, currentYellow, nextGreen
@@ -199,19 +227,6 @@ class RunSimulation:
 
             pygame.time.delay(int(DELAY_TIME / simulation_speed))
 
-    def initialize(self):
-        """Initialize the simulation."""
-        global signals, laneGroups
-
-        # Initialize traffic signals
-        for i in range(noOfSignals):
-            signal = TrafficSignal(0, 0, MIN_GREEN_TIME)
-            signals.append(signal)
-
-        # Initialize lane groups
-        for direction in directionNumbers.values():
-            laneGroups[direction] = pygame.sprite.Group()
-
     def spawn_vehicle(self):
         """Spawn a vehicle."""
         direction = random.choice(list(directionNumbers.values()))
@@ -219,14 +234,6 @@ class RunSimulation:
         vehicle = Vehicle(vehicle_type, 0, direction, 1, self)
         vehicle.spawn_time = time.time()  # Update spawn time
         laneGroups[direction].add(vehicle)  # Add the vehicle to the lane group
-
-    def destroy_vehicle(self):
-        """Destroy a vehicle."""
-        for direction, group in laneGroups.items():
-            for vehicle in group:
-                if vehicle.check_limit():
-                    vehicle.kill()
-            time.sleep(1 / SIMULATION_SPEED)  # Adjusted delay based on simulation speed
 
     def run(self):
         """Run the simulation."""
