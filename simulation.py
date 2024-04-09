@@ -1,5 +1,6 @@
 import pygame
 import sys
+import threading
 import time
 
 # Global Constants
@@ -121,3 +122,76 @@ class Vehicle(pygame.sprite.Sprite):
         self.hit_box = self.image.get_rect()
         self.hit_box.x = self.x
         self.hit_box.y = self.y
+
+
+class RunSimulation:
+    """Class to run the traffic simulation."""
+
+    def __init__(self):
+        """Initialize the simulation."""
+        self.initialize()
+
+    def initialize(self):
+        """Initialize the simulation."""
+        global signals, laneGroups
+
+        # Initialize traffic signals
+        for i in range(noOfSignals):
+            signal = TrafficSignal(0, 0, MIN_GREEN_TIME)
+            signals.append(signal)
+
+        # Initialize lane groups
+        for direction in directionNumbers.values():
+            laneGroups[direction] = pygame.sprite.Group()
+
+    def run(self):
+        """Run the simulation."""
+        # Initialize pygame
+        pygame.init()
+
+        # Set up the screen
+        screen_width = 1400
+        screen_height = 1000
+        screen = pygame.display.set_mode((screen_width, screen_height))
+        pygame.display.set_caption("Traffic Simulation")
+
+        # Clock for controlling the frame rate
+        clock = pygame.time.Clock()
+
+        # Main simulation loop
+        while True:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit()
+
+            # Clear the screen
+            screen.fill((255, 255, 255))
+
+            # Draw intersection image
+            screen.blit(intersection_image, (0, 0))
+
+            # Draw traffic lights
+            for i in range(0, noOfSignals):
+                rotated_signal = pygame.transform.rotate(red_signal_image, i * 90)
+                if i == currentGreen:
+                    if currentYellow == 1:
+                        rotated_signal = pygame.transform.rotate(yellow_signal_image, i * 90)
+                    else:
+                        # Adjust the rotation angle for signals 0 and 2
+                        rotated_signal = pygame.transform.rotate(green_signal_image, (i + 2) % noOfSignals * 270)
+                else:
+                    # Adjust the rotation angle for signals 0 and 2
+                    rotated_signal = pygame.transform.rotate(red_signal_image, (i + 2) % noOfSignals * 270)
+                screen.blit(rotated_signal, signalCords[i])
+
+            # Update the display
+            pygame.display.flip()
+
+            # Cap the frame rate
+            clock.tick(FPS)
+
+
+if __name__ == "__main__":
+    simulation = RunSimulation()
+    simulation.run()
