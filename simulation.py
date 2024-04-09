@@ -619,3 +619,11 @@ class RunSimulation:
 
         laneGroups = {'right': pygame.sprite.Group(), 'down': pygame.sprite.Group(), 'left': pygame.sprite.Group(),
                       'up': pygame.sprite.Group()}
+
+    def get_results(self):
+        return {
+            'Total time': self.total_time,
+            'average_crossing_time': self.average_waiting_time,
+            'max_crossing_time': self.max_waiting_time,
+            'min_crossing_time': self.min_waiting_time
+        }
