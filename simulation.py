@@ -10,7 +10,7 @@ DELAY_TIME = 1000
 MIN_GREEN_TIME = 5  # Minimum green time for each signal
 YELLOW_TIME = 3  # Yellow time for each signal after green
 SWITCH_DELAY = 2  # Delay before switching to the next green light (all signals are red)
-TRAFFIC_DENSITY = 2  # Default traffic density
+TRAFFIC_DENSITY = 5  # Default traffic density
 SIMULATION_SPEED = 1  # Default simulation speed
 
 # Global Variables
@@ -125,6 +125,64 @@ class Vehicle(pygame.sprite.Sprite):
         self.hit_box.x = self.x
         self.hit_box.y = self.y
 
+    def update(self):
+        """Update the vehicle's position and speed."""
+
+        if self.speed < speeds[self.vehicle_type]:
+            self.speed += self.acceleration * 2 * self.simulation_speed
+
+        self.get_vehicle_in_front()
+
+        # If a vehicle is in front of the current vehicle, reduce the speed to avoid collision
+        if self.vehicle_in_front:
+            distance_to_front_vehicle = self.get_distance_to_front_vehicle()
+            braking_distance = 150  # Tweak this value for smoother braking
+
+            if distance_to_front_vehicle < 10:
+                # Harsh braking when very close to the front vehicle
+                self.speed = 0
+            elif distance_to_front_vehicle < braking_distance:
+                # Gradual deceleration when approaching the front vehicle
+                self.speed *= 0.99
+
+        if self.check_collision_with_vehicles():
+            self.speed = 0
+
+        # Move the vehicle based on the direction
+        self.move()
+
+        # Update rotated hit_box
+        self._create_hit_box()
+
+    def check_collision_with_vehicles(self):
+        # Check for collision with other vehicles
+        for vehicle in laneGroups[self.direction]:
+            if vehicle != self:
+                if self.hit_box.colliderect(vehicle.hit_box):
+                    if self.get_collision_direction(vehicle) == 'front':
+                        self.vehicle_in_front = vehicle
+                        return True
+                    else:
+                        pass
+        return False
+
+    def get_distance_to_front_vehicle(self):
+        # Get the distance to the vehicle in front of the current vehicle
+        if self.vehicle_in_front:
+            if self.direction in ['right']:
+                # Calculate distance considering hit_box dimensions
+                return abs(self.vehicle_in_front.x - (self.x + self.hit_box.width / 2))
+            elif self.direction in ['down']:
+                # Calculate distance considering hit_box dimensions
+                return abs(self.vehicle_in_front.y - (self.y + self.hit_box.height / 2))
+            elif self.direction in ['left']:
+                # Calculate distance considering hit_box dimensions
+                return abs(self.x - (self.vehicle_in_front.x + self.vehicle_in_front.hit_box.width / 2))
+            elif self.direction in ['up']:
+                # Calculate distance considering hit_box dimensions
+                return abs(self.y - (self.vehicle_in_front.y + self.vehicle_in_front.hit_box.height / 2))
+        return float('inf')  # Return infinity if there is no vehicle in front
+
     def move(self):
         # Move the vehicle based on the direction
         if self.direction == 'right':
@@ -140,6 +198,37 @@ class Vehicle(pygame.sprite.Sprite):
         self.rect.x = self.x
         self.rect.y = self.y
 
+    def get_collision_direction(self, other_vehicle):
+        # Get the direction of the collision with another vehicle
+        if self.direction == 'right':
+            if other_vehicle.x > self.x:
+                return 'front'
+            elif other_vehicle.x < self.x:
+                return 'back'
+            else:
+                return 'side'
+        elif self.direction == 'down':
+            if other_vehicle.y > self.y:
+                return 'front'
+            elif other_vehicle.y < self.y:
+                return 'back'
+            else:
+                return 'side'
+        elif self.direction == 'left':
+            if other_vehicle.x < self.x:
+                return 'front'
+            elif other_vehicle.x > self.x:
+                return 'back'
+            else:
+                return 'side'
+        elif self.direction == 'up':
+            if other_vehicle.y < self.y:
+                return 'front'
+            elif other_vehicle.y > self.y:
+                return 'back'
+            else:
+                return 'side'
+
     def check_limit(self):
         # Check if the vehicle has reached the limit
         if self.direction == 'right' and self.x > 1600:
@@ -153,6 +242,33 @@ class Vehicle(pygame.sprite.Sprite):
         else:
             return False
 
+    def get_vehicle_in_front(self):
+        # Get the vehicle in front of the current vehicle (closest one)
+        if self.direction == 'right':
+            vehicles_in_front = [vehicle for vehicle in laneGroups[self.direction] if vehicle.x > self.x]
+            if vehicles_in_front:
+                self.vehicle_in_front = min(vehicles_in_front, key=lambda x: x.x)
+            else:
+                self.vehicle_in_front = None
+        elif self.direction == 'down':
+            vehicles_in_front = [vehicle for vehicle in laneGroups[self.direction] if vehicle.y > self.y]
+            if vehicles_in_front:
+                self.vehicle_in_front = min(vehicles_in_front, key=lambda x: x.y)
+            else:
+                self.vehicle_in_front = None
+        elif self.direction == 'left':
+            vehicles_in_front = [vehicle for vehicle in laneGroups[self.direction] if vehicle.x < self.x]
+            if vehicles_in_front:
+                self.vehicle_in_front = max(vehicles_in_front, key=lambda x: x.x)
+            else:
+                self.vehicle_in_front = None
+        elif self.direction == 'up':
+            vehicles_in_front = [vehicle for vehicle in laneGroups[self.direction] if vehicle.y < self.y]
+            if vehicles_in_front:
+                self.vehicle_in_front = max(vehicles_in_front, key=lambda x: x.y)
+            else:
+                self.vehicle_in_front = None
+
 
 def kill_vehicle():
     """Destroy a vehicle."""
@@ -161,6 +277,7 @@ def kill_vehicle():
             for vehicle in group:
                 if vehicle.check_limit():
                     vehicle.kill()
+                    print(f"Vehicle removed from {direction} direction")
         pygame.time.delay(500)
 
 
@@ -282,7 +399,7 @@ class RunSimulation:
             # Update and draw vehicles
             for direction, group in laneGroups.items():
                 for vehicle in group:
-                    vehicle.move()  # Move the vehicle
+                    vehicle.update()
                     screen.blit(vehicle.image, (vehicle.x, vehicle.y))
 
             # Spawn a new vehicle with a certain probability
