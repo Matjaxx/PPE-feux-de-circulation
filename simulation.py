@@ -125,28 +125,55 @@ class Vehicle(pygame.sprite.Sprite):
         self.hit_box.x = self.x
         self.hit_box.y = self.y
 
+    def check_reach_stop_line(self):
+        # Determine if the vehicle has reached the stop line:
+        if self.direction == 'right' and self.x + self.hit_box.width >= stopLines[self.direction]:
+            return True
+        elif self.direction == 'down' and self.y + self.hit_box.height >= stopLines[self.direction]:
+            return True
+        elif self.direction == 'left' and self.x <= stopLines[self.direction]:
+            return True
+        elif self.direction == 'up' and self.y <= stopLines[self.direction]:
+            return True
+
     def update(self):
-        """Update the vehicle's position and speed."""
-
-        if self.speed < speeds[self.vehicle_type]:
-            self.speed += self.acceleration * 2 * self.simulation_speed
-
-        self.get_vehicle_in_front()
-
-        # If a vehicle is in front of the current vehicle, reduce the speed to avoid collision
-        if self.vehicle_in_front:
-            distance_to_front_vehicle = self.get_distance_to_front_vehicle()
-            braking_distance = 150  # Tweak this value for smoother braking
-
-            if distance_to_front_vehicle < 10:
-                # Harsh braking when very close to the front vehicle
-                self.speed = 0
-            elif distance_to_front_vehicle < braking_distance:
-                # Gradual deceleration when approaching the front vehicle
+        # Update the vehicle
+        if self.check_reach_stop_line() and self.crossed is False:
+            if self.direction_number != currentGreen:
+                # Harsh braking when reaching a red signal at the stop line
                 self.speed *= 0.99
+                # If the signal is red, stop the vehicle just before the default stop line
+                if self.direction == 'right' and self.x + self.hit_box.width > defaultStop[self.direction]:
+                    self.x = defaultStop[self.direction] - self.hit_box.width
+                elif self.direction == 'down' and self.y + self.hit_box.height > defaultStop[self.direction]:
+                    self.y = defaultStop[self.direction] - self.hit_box.height
+                elif self.direction == 'left' and self.x < defaultStop[self.direction]:
+                    self.x = defaultStop[self.direction]
+                elif self.direction == 'up' and self.y < defaultStop[self.direction]:
+                    self.y = defaultStop[self.direction]
+            else:
+                # Adjust the speed based on acceleration
+                if self.speed < speeds[self.vehicle_type]:
+                    self.speed += self.acceleration * 2 * self.simulation_speed
+        else:
+            # If not at the stop line or the signal is green, keep moving
+            # Adjust the speed based on acceleration
+            if self.speed < speeds[self.vehicle_type]:
+                self.speed += self.acceleration * 2 * self.simulation_speed
 
-        if self.check_collision_with_vehicles():
-            self.speed = 0
+            self.get_vehicle_in_front()
+
+            # If a vehicle is in front of the current vehicle, reduce the speed to avoid collision
+            if self.vehicle_in_front:
+                distance_to_front_vehicle = self.get_distance_to_front_vehicle()
+                braking_distance = 150  # Tweak this value for smoother braking
+
+                if distance_to_front_vehicle < 10:
+                    # Harsh braking when very close to the front vehicle
+                    self.speed = 0
+                elif distance_to_front_vehicle < braking_distance:
+                    # Gradual deceleration when approaching the front vehicle
+                    self.speed *= 0.99
 
         # Move the vehicle based on the direction
         self.move()
@@ -277,7 +304,6 @@ def kill_vehicle():
             for vehicle in group:
                 if vehicle.check_limit():
                     vehicle.kill()
-                    print(f"Vehicle removed from {direction} direction")
         pygame.time.delay(500)
 
 
