@@ -513,6 +513,45 @@ class RunSimulation:
 
             self.screen.blit(self.background, (0, 0))
 
+            if self.debug_mode:
+                # Display total crossed vehicles in the top left corner
+                crossed_text = f"DEBUG SIMULATION"
+                crossed_text_surface = self.font.render(crossed_text, True, self.white, self.black)
+                self.screen.blit(crossed_text_surface, (10, 10))
+                # Display total crossed vehicles in the top left corner
+                crossed_text = f"Crossed: {self.total_crossed_vehicles}"
+                crossed_text_surface = self.font.render(crossed_text, True, self.white, self.black)
+                self.screen.blit(crossed_text_surface, (10, 40))
+                # display the elapsed time in the simulation
+                elapsed_time = f"Elapsed time: {pygame.time.get_ticks() * self.simulation_speed / 1000} seconds"
+                elapsed_time_surface = self.font.render(elapsed_time, True, self.white, self.black)
+                self.screen.blit(elapsed_time_surface, (10, 60))
+                # display the total vehicles spawned
+                vehicle_text = f"Spawned: {vehicle_spawned_counter} vehicles"
+                vehicle_text_surface = self.font.render(vehicle_text, True, self.white, self.black)
+                self.screen.blit(vehicle_text_surface, (10, 100))
+                # display the total vehicles killed
+                killed_vehicles = f"Killed: {vehicle_kill_counter} vehicles"
+                killed_vehicles_surface = self.font.render(killed_vehicles, True, self.white, self.black)
+                self.screen.blit(killed_vehicles_surface, (10, 120))
+                # display the total vehicles currently in the simulation
+                current_vehicles = f"Current vehicles: {len(self.simulation)}"
+                current_vehicles_surface = self.font.render(current_vehicles, True, self.white, self.black)
+                self.screen.blit(current_vehicles_surface, (10, 160))
+                # display the total vehicles for each direction
+                vehicles_right = f"Right: {len(laneGroups['right'])}"
+                vehicles_right_surface = self.font.render(vehicles_right, True, self.white, self.black)
+                self.screen.blit(vehicles_right_surface, (10, 180))
+                vehicles_down = f"Down: {len(laneGroups['down'])}"
+                vehicles_down_surface = self.font.render(vehicles_down, True, self.white, self.black)
+                self.screen.blit(vehicles_down_surface, (10, 200))
+                vehicles_left = f"Left: {len(laneGroups['left'])}"
+                vehicles_left_surface = self.font.render(vehicles_left, True, self.white, self.black)
+                self.screen.blit(vehicles_left_surface, (10, 220))
+                vehicles_up = f"Up: {len(laneGroups['up'])}"
+                vehicles_up_surface = self.font.render(vehicles_up, True, self.white, self.black)
+                self.screen.blit(vehicles_up_surface, (10, 240))
+
             # Display signals
             for i in range(0, noOfSignals):
                 rotated_signal = pygame.transform.rotate(red_signal_image, i * 90)
@@ -535,9 +574,21 @@ class RunSimulation:
                     if vehicle.crossed is False:
                         signals[i].vehicles_in_front += 1
 
+                if self.debug_mode:
+                    # Display the number of vehicles in front of the stop line
+                    vehicles_in_front_text = f"Vehicles in front ({directionNumbers[i]}): {signals[i].vehicles_in_front}"
+                    vehicles_in_front_surface = self.font.render(vehicles_in_front_text, True, self.white, self.black)
+                    self.screen.blit(vehicles_in_front_surface, (10, 260 + i * 20))
+
             # Display vehicles
             for vehicle in self.simulation:
                 self.screen.blit(vehicle.image, [vehicle.x, vehicle.y])
+                if self.debug_mode:
+                    # Display the direction of each vehicle
+                    direction_text = f"{vehicle.direction}"
+                    direction_surface = self.font.render(direction_text, True, self.white, self.black)
+                    self.screen.blit(direction_surface, (vehicle.x + 10, vehicle.y - 20))
+                    pygame.draw.rect(self.screen, (255, 0, 0), vehicle.hit_box, 2)
 
                 vehicle.update()
                 if vehicle.cross_time is not None and vehicle.flag is False:
