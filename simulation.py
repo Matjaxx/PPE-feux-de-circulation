@@ -10,7 +10,7 @@ DELAY_TIME = 1000
 MIN_GREEN_TIME = 5  # Minimum green time for each signal
 YELLOW_TIME = 3  # Yellow time for each signal after green
 SWITCH_DELAY = 2  # Delay before switching to the next green light (all signals are red)
-TRAFFIC_DENSITY = 0.3  # Default traffic density
+TRAFFIC_DENSITY = 2  # Default traffic density
 SIMULATION_SPEED = 1  # Default simulation speed
 
 # Global Variables
@@ -140,6 +140,19 @@ class Vehicle(pygame.sprite.Sprite):
         self.rect.x = self.x
         self.rect.y = self.y
 
+    def check_limit(self):
+        # Check if the vehicle has reached the limit
+        if self.direction == 'right' and self.x > 1600:
+            return True
+        elif self.direction == 'down' and self.y > 1600:
+            return True
+        elif self.direction == 'left' and self.x < -200:
+            return True
+        elif self.direction == 'up' and self.y < -200:
+            return True
+        else:
+            return False
+
 
 class RunSimulation:
     """Class to run the traffic simulation."""
@@ -206,6 +219,14 @@ class RunSimulation:
         vehicle = Vehicle(vehicle_type, 0, direction, 1, self)
         vehicle.spawn_time = time.time()  # Update spawn time
         laneGroups[direction].add(vehicle)  # Add the vehicle to the lane group
+
+    def destroy_vehicle(self):
+        """Destroy a vehicle."""
+        for direction, group in laneGroups.items():
+            for vehicle in group:
+                if vehicle.check_limit():
+                    vehicle.kill()
+            time.sleep(1 / SIMULATION_SPEED)  # Adjusted delay based on simulation speed
 
     def run(self):
         """Run the simulation."""
