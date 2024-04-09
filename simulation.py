@@ -2,9 +2,10 @@ import pygame
 import sys
 import threading
 import time
+import random
 
 # Global Constants
-FPS = 60  # Frames per second
+FPS = 1000  # Frames per second
 DELAY_TIME = 1000
 MIN_GREEN_TIME = 5  # Minimum green time for each signal
 YELLOW_TIME = 3  # Yellow time for each signal after green
@@ -123,6 +124,21 @@ class Vehicle(pygame.sprite.Sprite):
         self.hit_box.x = self.x
         self.hit_box.y = self.y
 
+    def move(self):
+        # Move the vehicle based on the direction
+        if self.direction == 'right':
+            self.x += (self.speed * 2 * self.simulation_speed)
+        elif self.direction == 'down':
+            self.y += (self.speed * 2 * self.simulation_speed)
+        elif self.direction == 'left':
+            self.x -= (self.speed * 2 * self.simulation_speed)
+        elif self.direction == 'up':
+            self.y -= (self.speed * 2 * self.simulation_speed)
+
+        # Update the rect attribute for collision detection
+        self.rect.x = self.x
+        self.rect.y = self.y
+
 
 class RunSimulation:
     """Class to run the traffic simulation."""
@@ -144,6 +160,14 @@ class RunSimulation:
         for direction in directionNumbers.values():
             laneGroups[direction] = pygame.sprite.Group()
 
+    def spawn_vehicle(self):
+        """Spawn a vehicle."""
+        direction = random.choice(list(directionNumbers.values()))
+        vehicle_type = random.choice(list(vehicleTypes.values()))
+        vehicle = Vehicle(vehicle_type, 0, direction, 1, self)
+        vehicle.spawn_time = time.time()  # Update spawn time
+        laneGroups[direction].add(vehicle)  # Add the vehicle to the lane group
+
     def run(self):
         """Run the simulation."""
         # Initialize pygame
@@ -157,6 +181,9 @@ class RunSimulation:
 
         # Clock for controlling the frame rate
         clock = pygame.time.Clock()
+
+        # Spawn vehicles at the start of simulation
+        self.spawn_vehicle()
 
         # Main simulation loop
         while True:
@@ -183,7 +210,18 @@ class RunSimulation:
                 else:
                     # Adjust the rotation angle for signals 0 and 2
                     rotated_signal = pygame.transform.rotate(red_signal_image, (i + 2) % noOfSignals * 270)
+
                 screen.blit(rotated_signal, signalCords[i])
+
+            # Update and draw vehicles
+            for direction, group in laneGroups.items():
+                for vehicle in group:
+                    vehicle.move()  # Move the vehicle
+                    screen.blit(vehicle.image, (vehicle.x, vehicle.y))
+
+            # Spawn a new vehicle with a certain probability
+            if random.random() < TRAFFIC_DENSITY / FPS:
+                self.spawn_vehicle()
 
             # Update the display
             pygame.display.flip()
