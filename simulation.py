@@ -11,6 +11,7 @@ MIN_GREEN_TIME = 5  # Minimum green time for each signal
 YELLOW_TIME = 3  # Yellow time for each signal after green
 SWITCH_DELAY = 2  # Delay before switching to the next green light (all signals are red)
 TRAFFIC_DENSITY = 0.3  # Default traffic density
+SIMULATION_SPEED = 1  # Default simulation speed
 
 # Global Variables
 signals = []  # List to store traffic signals
@@ -145,7 +146,45 @@ class RunSimulation:
 
     def __init__(self):
         """Initialize the simulation."""
+        self.exit_event = threading.Event()
         self.initialize()
+
+        self.thread4 = threading.Thread(name="repeat", target=self.repeat, args=(SIMULATION_SPEED,))
+        self.thread4.daemon = True
+        self.thread4.start()
+
+    def repeat(self, simulation_speed):
+        global currentGreen, currentYellow, nextGreen
+        last_time = pygame.time.get_ticks()
+
+        while not self.exit_event.is_set():
+            dt = pygame.time.get_ticks() - last_time
+            dt_seconds = dt / 1000  # Convert milliseconds to seconds
+            last_time = pygame.time.get_ticks()
+
+            signals[currentGreen].remaining_green_time -= simulation_speed * dt_seconds
+            nextGreen = (currentGreen + 1) % noOfSignals
+
+            if signals[currentGreen].remaining_green_time < 0 and currentYellow == 0:
+                signals[currentGreen].remaining_green_time = 0
+                currentYellow = 1
+                signals[currentGreen].remaining_yellow_time = YELLOW_TIME  # Reset yellow time
+
+            if currentYellow == 1:
+                signals[currentGreen].remaining_yellow_time -= simulation_speed * dt_seconds
+
+            if signals[currentGreen].remaining_yellow_time < 0 and currentYellow == 1:
+                currentYellow = 0
+                signals[currentGreen].remaining_yellow_time = 0
+
+                currentGreen = -1
+                pygame.time.delay(int(DELAY_TIME / simulation_speed))
+
+                currentGreen = nextGreen
+                green_time = MIN_GREEN_TIME + 1
+                signals[currentGreen].remaining_green_time = green_time / simulation_speed
+
+            pygame.time.delay(int(DELAY_TIME / simulation_speed))
 
     def initialize(self):
         """Initialize the simulation."""
@@ -200,7 +239,6 @@ class RunSimulation:
 
             # Draw traffic lights
             for i in range(0, noOfSignals):
-                rotated_signal = pygame.transform.rotate(red_signal_image, i * 90)
                 if i == currentGreen:
                     if currentYellow == 1:
                         rotated_signal = pygame.transform.rotate(yellow_signal_image, i * 90)
